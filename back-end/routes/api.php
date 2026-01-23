@@ -15,6 +15,7 @@ use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\SolicitudEmpresaController;
 use App\Http\Controllers\EmpresaActivacionController;
 use App\Http\Controllers\CalificacionController;
+use App\Http\Controllers\EmpresaDashboardController;
 
 /* --- RUTAS PÚBLICAS --- */
 Route::post('/register', [RegisteredUserController::class, 'store']);
@@ -69,6 +70,9 @@ Route::middleware('auth:sanctum')->group(function () {
         
         Route::get('/pedidos', [PedidoController::class, 'indexEmpresa']);
         Route::patch('/pedidos/{pedido}/estado', [PedidoController::class, 'actualizarEstado']);
+
+        //dashboard para empresa
+        Route::get('/empresa/dashboard', [EmpresaDashboardController::class, 'index']);
     });
 
     /* --- ROL: CLIENTE --- */
