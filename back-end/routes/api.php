@@ -15,6 +15,7 @@ use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\SolicitudEmpresaController;
 use App\Http\Controllers\EmpresaActivacionController;
 use App\Http\Controllers\CalificacionController;
+use App\Http\Controllers\EmpresaDashboardController;
 
 /* --- RUTAS TOTALMENTE PÚBLICAS --- */
 // Ponemos destacados al principio para que Laravel no la confunda con /productos/{id}
@@ -72,6 +73,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'auth:sanctum'], function () 
 
         Route::get('/pedidos', [PedidoController::class, 'indexEmpresa']);
         Route::patch('/pedidos/{pedido}/estado', [PedidoController::class, 'actualizarEstado']);
+
+        //dashboard para empresa
+        Route::get('/empresa/dashboard', [EmpresaDashboardController::class, 'index']);
     });
 
     /* --- ROL: CLIENTE --- */
