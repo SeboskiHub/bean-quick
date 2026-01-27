@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { FaBolt, FaStar, FaLightbulb, FaArrowRight, FaStore } from 'react-icons/fa';
@@ -6,10 +7,15 @@ console.log(motion)
 const Home = () => {
     const [destacados, setDestacados] = useState([]);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+
+    // Verificamos si hay un token en el localStorage para saber si está logueado
+    const token = localStorage.getItem('AUTH_TOKEN');
 
     useEffect(() => {
         const fetchDestacados = async () => {
             try {
+                // Cambiado a la URL de tu API centralizada (ajusta si usas el clienteAxios)
                 const res = await axios.get('http://127.0.0.1:8000/api/productos/destacados');
                 setDestacados(res.data);
             } catch (error) {
@@ -20,6 +26,24 @@ const Home = () => {
         };
         fetchDestacados();
     }, []);
+
+    // Lógica para el botón "Ver Menú"
+    const handleVerMenu = () => {
+        if (token) {
+            navigate('/cliente/dashboard');
+        } else {
+            navigate('/login');
+        }
+    };
+
+    // Lógica para ir a una tienda específica desde un producto
+    const handleIrATienda = (empresaId) => {
+        if (token) {
+            navigate(`/tienda/${empresaId}`);
+        } else {
+            navigate('/login');
+        }
+    };
 
     const fadeInUp = {
         hidden: { opacity: 0, y: 30 },
@@ -41,14 +65,20 @@ const Home = () => {
                 <div style={styles.headerOverlay}>
                     <div style={styles.container}>
                         <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.8 }} style={styles.logoContainer}>
-                            <img src="./img/logo.png" alt="Logo" style={styles.logo} />
+                            {/* Ruta corregida para que funcione desde cualquier subcarpeta */}
+                            <img src="/img/logo.png" alt="Logo" style={styles.logo} />
                         </motion.div>
                         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4, duration: 0.8 }} style={styles.heroText}>
                             <h2 style={styles.heroTitle}>
                                 Bienvenido a Bean Quick <br />
                                 <span style={styles.heroSubtitle}>El arte de reservar tu café ideal</span>
                             </h2>
-                            <motion.button whileHover={{ scale: 1.1, backgroundColor: '#8b5e3c' }} whileTap={{ scale: 0.9 }} style={styles.ctaButton}>
+                            <motion.button 
+                                whileHover={{ scale: 1.1, backgroundColor: '#8b5e3c' }} 
+                                whileTap={{ scale: 0.9 }} 
+                                style={styles.ctaButton}
+                                onClick={handleVerMenu}
+                            >
                                 Ver Menú <FaArrowRight style={{ marginLeft: '10px' }} />
                             </motion.button>
                         </motion.div>
@@ -90,7 +120,8 @@ const Home = () => {
                                     key={prod.id} 
                                     variants={fadeInUp}
                                     whileHover={{ scale: 1.03 }}
-                                    style={styles.productoCard}
+                                    style={{...styles.productoCard, cursor: 'pointer'}}
+                                    onClick={() => handleIrATienda(prod.empresa_id)}
                                 >
                                     <div style={styles.imageContainer}>
                                         <motion.img 
@@ -103,7 +134,6 @@ const Home = () => {
                                     <div style={styles.productoInfo}>
                                         <p style={styles.productoLabel}>{prod.nombre}</p>
                                         
-                                        {/* NOMBRE Y LOGO DE LA EMPRESA */}
                                         <div style={styles.companyInfoContainer}>
                                             {prod.empresa?.logo_url ? (
                                                 <img 
@@ -150,7 +180,13 @@ const Home = () => {
                             </p>
                         </motion.div>
                         <motion.div initial={{ x: 100, opacity: 0 }} whileInView={{ x: 0, opacity: 1 }} transition={{ duration: 0.8 }} style={styles.aliadosLogoCont}>
-                            <motion.img animate={{ y: [0, -15, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} src="./img/aliados/SENAlogo.png" alt="SENA" style={styles.senaLogo} />
+                            <motion.img 
+                                animate={{ y: [0, -15, 0] }} 
+                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} 
+                                src="/img/aliados/SENAlogo.png" 
+                                alt="SENA" 
+                                style={styles.senaLogo} 
+                            />
                         </motion.div>
                     </div>
                 </div>
@@ -159,9 +195,7 @@ const Home = () => {
     );
 };
 
-// --- ESTILOS ACTUALIZADOS ---
 const styles = {
-    // ... (Mantén todos tus estilos anteriores iguales)
     pageWrapper: { fontFamily: "'Poppins', sans-serif", color: '#3e2723', overflowX: 'hidden' },
     container: { maxWidth: '1200px', margin: '0 auto', padding: '0 20px' },
     section: { padding: '100px 0' },
@@ -189,8 +223,6 @@ const styles = {
     productoImg: { width: '100%', height: '100%', objectFit: 'cover' },
     productoInfo: { padding: '20px', textAlign: 'center' },
     productoLabel: { fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '12px' },
-    
-    // NUEVOS ESTILOS PARA LA EMPRESA
     companyInfoContainer: { 
         display: 'flex', 
         alignItems: 'center', 
@@ -210,17 +242,8 @@ const styles = {
         objectFit: 'cover',
         border: '1px solid #d7ccc8'
     },
-    companyIconTiny: {
-        color: '#8d6e63',
-        fontSize: '14px'
-    },
-    storeTextName: { 
-        fontSize: '12px', 
-        fontWeight: '600', 
-        color: '#5d4037',
-        letterSpacing: '0.3px'
-    },
-    
+    companyIconTiny: { color: '#8d6e63', fontSize: '14px' },
+    storeTextName: { fontSize: '12px', fontWeight: '600', color: '#5d4037', letterSpacing: '0.3px' },
     starsSmall: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' },
     ratingNum: { fontSize: '11px', fontWeight: 'bold', marginLeft: '2px' },
     aliadosWrapper: { display: 'flex', alignItems: 'center', gap: '60px', flexWrap: 'wrap' },

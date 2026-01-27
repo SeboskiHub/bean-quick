@@ -17,13 +17,13 @@ import DashboardEmpresa from './pages/empresa/DashboardEmpresa';
 import AgregarProducto from './pages/empresa/AgregarProducto';
 import MisProductos from './pages/empresa/MisProductos';
 import VistaTienda from './pages/VerTienda';
-import CarritoFlotante from './pages/CarritoFlotante';
+import CarritoFlotante from './pages/components/CarritoFlotante';
 import ActivarCuenta from './pages/auth/ActivarCuenta';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminSolicitudes from './pages/admin/AdminSolicitudes';
 import MisPedidos from './pages/cliente/MisPedidos';
 import GestionPedidosEmpresa from './pages/empresa/GestionPedidosEmpresa';
-
+import Footer from './pages/components/common/Footer';  
 // Nuevas páginas (Deberás crearlas a continuación)
 import MisCalificaciones from './pages/cliente/MisCalificaciones';
 import PerfilUsuario from './pages/cliente/PerfilUsuario';
@@ -277,7 +277,9 @@ const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, act
                     </Routes>
                 </div>
             </main>
+            <Footer />
         </>
+        
     );
 };
 
