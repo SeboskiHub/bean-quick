@@ -160,7 +160,7 @@ const DashboardEmpresa = () => {
                                 <h1 style={{ margin: 0, fontSize: '20px' }}>{empresa?.nombre}</h1>
                                 <FaChevronDown size={12} color="#64748b" />
                             </div>
-                            <p style={{ color: '#888', margin: 0, fontSize: '14px' }}>Administrador</p>
+                            <p style={{ color: '#888', margin: 0, fontSize: '14px' }}>Empresa</p>
 
                             {showProfileMenu && (
                                 <div style={styles.dropdown}>
