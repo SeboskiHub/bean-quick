@@ -106,49 +106,82 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
                                             {estaAbierto && (
                                                 <div style={styles.productosDetalle}>
                                                     {tienda.productos.map(prod => {
-                                                        const pPrecio = Number(prod.precio) || 0;
-                                                        const pCant = Number(prod.pivot?.cantidad ?? prod.cantidad ?? 0);
-                                                        const stockDisponible = prod.stock ?? 999;
+    const pPrecio = Number(prod.precio) || 0;
+    // IMPORTANTE: Aseguramos que pCant sea un número
+    const pCant = Number(prod.pivot?.cantidad ?? prod.cantidad ?? 0);
+    const stockDisponible = Number(prod.stock);
 
-                                                        return (
-                                                            <div key={prod.id} style={styles.productoFila}>
-                                                                <img 
-                                                                    src={prod.imagen ? `http://127.0.0.1:8000/storage/${prod.imagen}` : '/placeholder.jpg'} 
-                                                                    style={styles.prodImg} 
-                                                                />
-                                                                <div style={{ flex: 1 }}>
-                                                                    <div style={styles.prodHeader}>
-                                                                        <span style={styles.prodNombre}>{prod.nombre}</span>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                            <strong>${(pPrecio * pCant).toLocaleString()}</strong>
-                                                                            <FaTrash style={styles.btnEliminar} onClick={() => eliminarDelCarrito(prod.id)} />
-                                                                        </div>
-                                                                    </div>
-                                                                    
-                                                                    <div style={styles.controles}>
-                                                                        <button style={styles.qtyBtn} onClick={() => actualizarCantidad(prod.id, pCant - 1)} disabled={pCant <= 1}>
-                                                                            <FaMinus size={10} />
-                                                                        </button>
-                                                                        <span style={{ fontWeight: 'bold' }}>{pCant}</span>
-                                                                        <button 
-                                                                            style={{...styles.qtyBtn, opacity: pCant >= stockDisponible ? 0.5 : 1}} 
-                                                                            onClick={() => actualizarCantidad(prod.id, pCant + 1)}
-                                                                            disabled={pCant >= stockDisponible}
-                                                                        >
-                                                                            <FaPlus size={10} />
-                                                                        </button>
-                                                                        
-                                                                        {/* AVISO DE STOCK LÍMITE */}
-                                                                        {pCant >= stockDisponible && (
-                                                                            <span style={styles.stockWarning}>
-                                                                                Máx: {stockDisponible}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
+    return (
+        <div key={prod.id} style={styles.productoFila}>
+            <img 
+                src={prod.imagen ? `http://127.0.0.1:8000/storage/${prod.imagen}` : '/placeholder.jpg'} 
+                style={styles.prodImg} 
+                alt={prod.nombre}
+            />
+            <div style={{ flex: 1 }}>
+                <div style={styles.prodHeader}>
+                    <span style={styles.prodNombre}>{prod.nombre}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong>${(pPrecio * pCant).toLocaleString()}</strong>
+                        <FaTrash style={styles.btnEliminar} onClick={() => eliminarDelCarrito(prod.id)} />
+                    </div>
+                </div>
+                
+                <div style={styles.controles}>
+                    {/* BOTÓN RESTAR: Ahora es independiente del stock */}
+                    <button 
+        type="button"
+        style={{
+            ...styles.qtyBtn,
+            opacity: pCant <= 1 ? 0.4 : 1,
+            cursor: pCant <= 1 ? 'not-allowed' : 'pointer',
+            backgroundColor: '#fff' // Aseguramos fondo blanco para que se vea activo
+        }} 
+        onClick={(e) => {
+            e.stopPropagation(); // Evitamos que el click afecte a otros elementos
+            if (pCant > 1) {
+                console.log("Restando producto:", prod.id, "Nueva cant:", pCant - 1);
+                actualizarCantidad(prod.id, pCant - 1);
+            }
+        }} 
+        disabled={pCant <= 1}
+    >
+        <FaMinus size={10} />
+    </button>
+
+                    <span style={{ fontWeight: 'bold', minWidth: '25px', textAlign: 'center' }}>
+                        {pCant}
+                    </span>
+
+                    {/* BOTÓN SUMAR: Bloquea solo si llega al stock */}
+                    <button 
+                        type="button"
+                        style={{
+                            ...styles.qtyBtn, 
+                            opacity: pCant >= stockDisponible ? 0.4 : 1,
+                            cursor: pCant >= stockDisponible ? 'not-allowed' : 'pointer',
+                            backgroundColor: pCant >= stockDisponible ? '#f8d7da' : '#fff'
+                        }} 
+                        onClick={() => {
+                            if (pCant < stockDisponible) {
+                                actualizarCantidad(prod.id, pCant + 1);
+                            }
+                        }}
+                        disabled={pCant >= stockDisponible}
+                    >
+                        <FaPlus size={10} />
+                    </button>
+                    
+                    {pCant >= stockDisponible && (
+                        <span style={styles.stockWarning}>
+                            <FaExclamationTriangle size={10} /> Máximo
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+})}
 
                                                     <div style={styles.empresaFooter}>
                                                         <div style={styles.horaCaja}>

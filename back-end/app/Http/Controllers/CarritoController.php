@@ -10,119 +10,106 @@ use Illuminate\Http\JsonResponse;
 
 class CarritoController extends Controller
 {
-    /**
-     * FUNCIÓN INDEX:
-     * Obtiene el carrito del usuario. Si no existe, lo crea en el momento (firstOrCreate).
-     * Devuelve los productos con su respectiva empresa y la cantidad guardada en la tabla pivote.
-     */
+    // Carga los productos y nos asegura que React reciba el stock actual
     public function index()
     {
         $user = Auth::user();
         $carrito = Carrito::firstOrCreate(['user_id' => $user->id]);
 
         $productos = $carrito->productos()
-            ->with('empresa') // Carga la información de la tienda que vende el producto
-            ->withPivot('cantidad') // Trae la columna 'cantidad' de la tabla intermedia
+            ->with('empresa')
+            ->withPivot('cantidad')
             ->get()
             ->map(function ($producto) {
-                // Asegura que el precio sea tratado como un número decimal (float) en el JSON
                 $producto->precio = (float) $producto->precio;
+                // Nos aseguramos que el stock sea un entero para las validaciones en React
+                $producto->stock = (int) $producto->stock; 
                 return $producto;
             });
 
         return response()->json($productos);
     }
-public function agregar(Request $request, $productoId): JsonResponse
-    {
-        $request->validate([
-            'cantidad' => 'required|integer|min:1'
-        ]);
 
-        $producto = Producto::findOrFail($productoId); // Buscamos el producto real
+    public function agregar(Request $request, $productoId): JsonResponse
+    {
+        $request->validate(['cantidad' => 'required|integer|min:1']);
+
+        $producto = Producto::findOrFail($productoId);
         $user = Auth::user();
         $carrito = Carrito::firstOrCreate(['user_id' => $user->id]);
         
         $carritoProducto = $carrito->productos()->where('producto_id', $productoId)->first();
-        $cantidadActualEnCarrito = $carritoProducto ? $carritoProducto->pivot->cantidad : 0;
-        $nuevaCantidadTotal = $cantidadActualEnCarrito + $request->cantidad;
+        $cantidadActual = $carritoProducto ? $carritoProducto->pivot->cantidad : 0;
+        $nuevaCantidad = $cantidadActual + $request->cantidad;
 
-        // --- VALIDACIÓN DE STOCK ---
-        if ($producto->stock < $nuevaCantidadTotal) {
+        if ($producto->stock < $nuevaCantidad) {
             return response()->json([
                 'error' => "Lo sentimos, solo quedan {$producto->stock} unidades disponibles."
             ], 422);
         }
 
         if ($carritoProducto) {
-            $carrito->productos()->updateExistingPivot($productoId, ['cantidad' => $nuevaCantidadTotal]);
+            $carrito->productos()->updateExistingPivot($productoId, ['cantidad' => $nuevaCantidad]);
         } else {
             $carrito->productos()->attach($productoId, ['cantidad' => $request->cantidad]);
         }
 
         return response()->json([
-            'message' => 'Producto agregado al carrito.',
-            'productos' => $carrito->productos()->with(['empresa'])->withPivot('cantidad')->get()
+            'message' => 'Producto agregado.',
+            // Importante: Recargar con stock y empresa para que el carrito se actualice bien
+            'productos' => $this->obtenerProductosCarrito($carrito)
         ]);
     }
 
     public function actualizar(Request $request, $productoId): JsonResponse
     {
         $request->validate(['cantidad' => 'required|integer|min:1']);
-        
         $producto = Producto::findOrFail($productoId);
         
-        // --- VALIDACIÓN DE STOCK AL ACTUALIZAR ---
         if ($producto->stock < $request->cantidad) {
-            return response()->json([
-                'error' => "No puedes agregar más de {$producto->stock} unidades."
-            ], 422);
+            return response()->json(['error' => "Stock insuficiente."], 422);
         }
 
         $carrito = Carrito::where('user_id', Auth::id())->first();
-
         if ($carrito) {
-            $carrito->productos()->updateExistingPivot($productoId, [
-                'cantidad' => $request->cantidad,
-            ]);
+            $carrito->productos()->updateExistingPivot($productoId, ['cantidad' => $request->cantidad]);
         }
 
         return response()->json([
-            'message' => 'Cantidad actualizada correctamente.',
-            'productos' => $carrito->productos()->with(['empresa'])->withPivot('cantidad')->get()
-        ]);
-    }/* 
-     * FUNCIÓN ELIMINAR:
-     * Quita un producto específico del carrito usando detach().
-     */
-    public function eliminar($productoId): JsonResponse
-    {
-        $carrito = Carrito::where('user_id', Auth::id())->first();
-
-        if ($carrito) {
-            $carrito->productos()->detach($productoId);
-        }
-
-        return response()->json([
-            'message' => 'Producto eliminado del carrito.',
-            'productos' => $carrito->productos()->with(['empresa'])->withPivot('cantidad')->get()
+            'message' => 'Cantidad actualizada.',
+            'productos' => $this->obtenerProductosCarrito($carrito)
         ]);
     }
 
-    /**
-     * FUNCIÓN VACIAR:
-     * Elimina todas las relaciones del carrito (lo deja limpio) sin borrar el carrito en sí.
-     */
+    // --- FUNCIÓN AUXILIAR PARA NO REPETIR CÓDIGO ---
+    private function obtenerProductosCarrito($carrito) {
+        return $carrito->productos()
+            ->with('empresa')
+            ->withPivot('cantidad')
+            ->get()
+            ->map(function ($p) {
+                $p->precio = (float) $p->precio;
+                $p->stock = (int) $p->stock;
+                return $p;
+            });
+    }
+
+    public function eliminar($productoId): JsonResponse
+    {
+        $carrito = Carrito::where('user_id', Auth::id())->first();
+        if ($carrito) $carrito->productos()->detach($productoId);
+
+        return response()->json([
+            'message' => 'Eliminado.',
+            'productos' => $this->obtenerProductosCarrito($carrito)
+        ]);
+    }
+
     public function vaciar(): JsonResponse
     {
         $carrito = Carrito::where('user_id', Auth::id())->first();
+        if ($carrito) $carrito->productos()->detach();
 
-        if ($carrito) {
-            $carrito->productos()->detach(); // Al no pasar ID, quita todos los productos vinculados
-        }
-
-        return response()->json([
-            'message' => 'Carrito vaciado correctamente.',
-            'productos' => []
-        ]);
+        return response()->json(['message' => 'Vaciado.', 'productos' => []]);
     }
 }
