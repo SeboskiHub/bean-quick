@@ -26,6 +26,7 @@ class Producto extends Model
      */
     protected $casts = [
         'precio' => 'float',
+        'stock'  => 'integer',
     ];
 
     // --- Relaciones ---

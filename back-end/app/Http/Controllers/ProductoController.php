@@ -55,15 +55,15 @@ class ProductoController extends Controller
 
         return response()->json($producto);
     }
-
-    /**
-     * Guardar un nuevo producto.
+/**
+     * GUARDAR NUEVO PRODUCTO
      */
     public function store(Request $request)
     {
         $request->validate([
             'nombre' => 'required|string|max:255',
             'precio' => 'required|numeric',
+            'stock'  => 'required|integer|min:0', // <-- 1. VALIDAR STOCK AL CREAR
             'categoria_id' => 'required|exists:categorias,id',
             'descripcion' => 'nullable|string',
             'imagen' => 'nullable|image|max:2048',
@@ -75,6 +75,7 @@ class ProductoController extends Controller
         $producto->nombre = $request->nombre;
         $producto->descripcion = $request->descripcion;
         $producto->precio = $request->precio;
+        $producto->stock = $request->stock; // <-- 2. ASIGNAR STOCK AL CREAR
         $producto->empresa_id = $empresa->id;
         $producto->categoria_id = $request->categoria_id;
 
@@ -91,43 +92,43 @@ class ProductoController extends Controller
     }
 
     /**
-     * Actualizar un producto existente.
-     */
-    public function update(Request $request, $id): JsonResponse
-    {
-        $empresa = $this->getEmpresaAutenticada();
-        $producto = Producto::where('id', $id)->where('empresa_id', $empresa->id)->first();
+     * ACTUALIZAR PRODUCTO EXISTENTE
+     */public function update(Request $request, $id): JsonResponse
+{
+    $empresa = $this->getEmpresaAutenticada();
+    $producto = Producto::where('id', $id)->where('empresa_id', $empresa->id)->first();
 
-        if (!$producto) {
-            return response()->json(['message' => 'Producto no encontrado.'], 404);
-        }
+    if (!$producto) return response()->json(['message' => 'No encontrado'], 404);
 
-        $request->validate([
-            'nombre' => 'required|string|max:255',
-            'descripcion' => 'nullable|string',
-            'precio' => 'required|numeric|min:0',
-            'categoria_id' => 'required|exists:categorias,id',
-            'imagen' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048'
-        ]);
+    // DEBUG: Agrega esta línea temporalmente para ver en los logs qué está llegando
+    // \Log::info($request->all()); 
 
-        $producto->fill($request->only(['nombre', 'descripcion', 'precio', 'categoria_id']));
+    $request->validate([
+        'nombre' => 'required|string|max:255',
+        'precio' => 'required|numeric',
+        'stock'  => 'required|integer', // Verifica que llegue como entero
+        'categoria_id' => 'required|exists:categorias,id',
+    ]);
 
-        if ($request->hasFile('imagen')) {
-            // Eliminar imagen anterior para ahorrar espacio
-            if ($producto->imagen) {
-                Storage::disk('public')->delete($producto->imagen);
-            }
-            $producto->imagen = $request->file('imagen')->store('productos', 'public');
-        }
+    // ASIGNACIÓN MANUAL (Más segura que fill() cuando hay problemas de detección)
+    $producto->nombre = $request->input('nombre');
+    $producto->descripcion = $request->input('descripcion');
+    $producto->precio = $request->input('precio');
+    $producto->stock = $request->input('stock'); // <--- Forzamos la asignación
+    $producto->categoria_id = $request->input('categoria_id');
 
-        $producto->save();
-
-        return response()->json([
-            'message' => 'Producto actualizado correctamente.',
-            'producto' => $producto
-        ]);
+    if ($request->hasFile('imagen')) {
+        if ($producto->imagen) Storage::disk('public')->delete($producto->imagen);
+        $producto->imagen = $request->file('imagen')->store('productos', 'public');
     }
 
+    $producto->save();
+
+    return response()->json([
+        'message' => '¡Actualizado!',
+        'producto' => $producto
+    ]);
+}
     /**
      * Eliminar un producto.
      */

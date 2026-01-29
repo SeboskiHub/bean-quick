@@ -1,35 +1,28 @@
 import React, { useState } from 'react';
-import { FaShoppingBag, FaTimes, FaMinus, FaPlus, FaClock, FaChevronDown, FaChevronUp, FaStore, FaTrash } from 'react-icons/fa';
+import { FaShoppingBag, FaTimes, FaMinus, FaPlus, FaClock, FaChevronDown, FaChevronUp, FaStore, FaTrash, FaExclamationTriangle } from 'react-icons/fa';
 
 const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPedido, eliminarDelCarrito }) => {
     const [isOpen, setIsOpen] = useState(false);
+    console.log(setCarrito)
     const [seccionesAbiertas, setSeccionesAbiertas] = useState({});
     const [horasPorEmpresa, setHorasPorEmpresa] = useState({});
 
-    // --- AGRUPAR PRODUCTOS POR EMPRESA ---
+    // --- AGRUPAR PRODUCTOS POR EMPRESA (Se mantiene igual) ---
     const carritoAgrupado = carrito.reduce((acc, producto) => {
         const empresaId = producto.empresa_id || producto.empresa?.id;
         if (!empresaId) return acc;
 
         if (!acc[empresaId]) {
-            const nombreEmpresa = producto.empresa?.nombre_establecimiento ||
-                producto.empresa?.nombre ||
-                producto.nombre_tienda_aux || 
-                "Tienda";
-
-            const logoEmpresa = producto.empresa?.logo
-                ? `http://127.0.0.1:8000/storage/${producto.empresa.logo}`
-                : null;
-
+            const nombreEmpresa = producto.empresa?.nombre_establecimiento || 
+                            producto.empresa?.nombre || 
+                            "Tienda";
             acc[empresaId] = {
                 id: empresaId,
                 nombre: nombreEmpresa,
-                logo: logoEmpresa,
+                logo: producto.empresa?.logo ? `http://127.0.0.1:8000/storage/${producto.empresa.logo}` : null,
                 productos: []
             };
         }
-
-        producto.nombre_tienda_aux = acc[empresaId].nombre;
         acc[empresaId].productos.push(producto);
         return acc;
     }, {});
@@ -47,14 +40,23 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
         if (!hora) return alert(`Por favor selecciona hora para ${nombreTienda}`);
 
         const productosAEnviar = carrito.filter(p => (p.empresa_id || p.empresa?.id) == empresaId);
-        const exito = await confirmarPedido("Recogida en Local", hora, empresaId, productosAEnviar);
+        
+        try {
+            // Pasamos los productos para que el controller valide stock uno por uno
+            const exito = await confirmarPedido("Recogida en Local", hora, empresaId, productosAEnviar);
 
-        if (exito) {
-            setHorasPorEmpresa(prev => {
-                const nuevas = { ...prev };
-                delete nuevas[empresaId];
-                return nuevas;
-            });
+            if (exito) {
+                setHorasPorEmpresa(prev => {
+                    const nuevas = { ...prev };
+                    delete nuevas[empresaId];
+                    return nuevas;
+                });
+                // Si el carrito queda vacío tras confirmar la última tienda, cerramos el sidebar
+                if (carrito.length <= productosAEnviar.length) setIsOpen(false);
+            }
+        } catch (error) {
+            // Aquí capturamos el error 422 de Laravel (Stock insuficiente)
+            alert(error.response?.data?.message || "Error al procesar el pedido");
         }
     };
 
@@ -81,7 +83,6 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
                                     const tienda = carritoAgrupado[empresaId];
                                     const estaAbierto = seccionesAbiertas[empresaId] !== false;
 
-                                    // Cálculo reactivo del total por empresa
                                     const totalEmpresa = tienda.productos.reduce((s, p) => {
                                         const precio = Number(p.precio) || 0;
                                         const cantidad = Number(p.pivot?.cantidad ?? p.cantidad ?? 0);
@@ -106,31 +107,43 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
                                                 <div style={styles.productosDetalle}>
                                                     {tienda.productos.map(prod => {
                                                         const pPrecio = Number(prod.precio) || 0;
-                                                        // Leemos la cantidad de forma segura y prioritaria
                                                         const pCant = Number(prod.pivot?.cantidad ?? prod.cantidad ?? 0);
-
-                                                        const imgUrl = prod.imagen
-                                                            ? `http://127.0.0.1:8000/storage/${prod.imagen}`
-                                                            : '/placeholder-producto.jpg';
+                                                        const stockDisponible = prod.stock ?? 999;
 
                                                         return (
                                                             <div key={prod.id} style={styles.productoFila}>
-                                                                <img src={imgUrl} style={styles.prodImg} alt={prod.nombre} />
+                                                                <img 
+                                                                    src={prod.imagen ? `http://127.0.0.1:8000/storage/${prod.imagen}` : '/placeholder.jpg'} 
+                                                                    style={styles.prodImg} 
+                                                                />
                                                                 <div style={{ flex: 1 }}>
                                                                     <div style={styles.prodHeader}>
                                                                         <span style={styles.prodNombre}>{prod.nombre}</span>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                             <strong>${(pPrecio * pCant).toLocaleString()}</strong>
-                                                                            <FaTrash
-                                                                                style={styles.btnEliminar}
-                                                                                onClick={() => eliminarDelCarrito(prod.id)}
-                                                                            />
+                                                                            <FaTrash style={styles.btnEliminar} onClick={() => eliminarDelCarrito(prod.id)} />
                                                                         </div>
                                                                     </div>
+                                                                    
                                                                     <div style={styles.controles}>
-                                                                        <button style={styles.qtyBtn} onClick={() => actualizarCantidad(prod.id, pCant - 1)}><FaMinus size={10} /></button>
-                                                                        <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{pCant}</span>
-                                                                        <button style={styles.qtyBtn} onClick={() => actualizarCantidad(prod.id, pCant + 1)}><FaPlus size={10} /></button>
+                                                                        <button style={styles.qtyBtn} onClick={() => actualizarCantidad(prod.id, pCant - 1)} disabled={pCant <= 1}>
+                                                                            <FaMinus size={10} />
+                                                                        </button>
+                                                                        <span style={{ fontWeight: 'bold' }}>{pCant}</span>
+                                                                        <button 
+                                                                            style={{...styles.qtyBtn, opacity: pCant >= stockDisponible ? 0.5 : 1}} 
+                                                                            onClick={() => actualizarCantidad(prod.id, pCant + 1)}
+                                                                            disabled={pCant >= stockDisponible}
+                                                                        >
+                                                                            <FaPlus size={10} />
+                                                                        </button>
+                                                                        
+                                                                        {/* AVISO DE STOCK LÍMITE */}
+                                                                        {pCant >= stockDisponible && (
+                                                                            <span style={styles.stockWarning}>
+                                                                                Máx: {stockDisponible}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -177,33 +190,34 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
     );
 };
 
-// ... (Tus estilos se mantienen iguales)
 const styles = {
-floatingBtn: { position: 'fixed', bottom: '20px', right: '20px', backgroundColor: '#6f4e37', color: 'white', padding: '15px', borderRadius: '50%', cursor: 'pointer', zIndex: 1000, boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-badge: { position: 'absolute', top: '-5px', right: '-5px', background: 'red', color: 'white', borderRadius: '50%', padding: '2px 7px', fontSize: '12px', border: '2px solid white', fontWeight: 'bold' },
-overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', justifyContent: 'flex-end' },
-sidebar: { width: '380px', background: '#f8f9fa', height: '100%', display: 'flex', flexDirection: 'column', padding: '20px', boxShadow: '-5px 0 15px rgba(0,0,0,0.1)' },
-header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #ddd', paddingBottom: '10px' },
-itemsContainer: { flex: 1, overflowY: 'auto' },
-empresaCard: { background: 'white', borderRadius: '12px', marginBottom: '15px', border: '1px solid #eee', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
-empresaHeader: { padding: '12px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' },
-empresaInfo: { display: 'flex', alignItems: 'center', gap: '10px' },
-logoMini: { width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #eee' },
-logoPlaceholder: { width: '32px', height: '32px', borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6f4e37' },
-nombreEmpresa: { fontWeight: 'bold', fontSize: '15px', color: '#333' },
-productosDetalle: { padding: '15px', background: '#fcfcfc', borderTop: '1px solid #f0f0f0' },
-productoFila: { display: 'flex', gap: '12px', marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid #eee' },
-prodImg: { width: '50px', height: '50px', borderRadius: '6px', objectFit: 'cover' },
-prodHeader: { display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' },
-prodNombre: { fontWeight: '500', color: '#333', maxWidth: '120px' },
-btnEliminar: { color: '#ff4d4d', cursor: 'pointer', fontSize: '13px' },
-controles: { display: 'flex', alignItems: 'center', gap: '10px' },
-qtyBtn: { width: '24px', height: '24px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-empresaFooter: { marginTop: '10px', paddingTop: '10px', borderTop: '2px dashed #eee' },
-horaCaja: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' },
-inputHora: { padding: '5px', borderRadius: '5px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' },
-totalCaja: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px' },
-btnConfirmar: { width: '100%', padding: '12px', background: '#6f4e37', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', transition: '0.3s' }
+    // ... (Tus estilos anteriores se mantienen)
+    floatingBtn: { position: 'fixed', bottom: '20px', right: '20px', backgroundColor: '#6f4e37', color: 'white', padding: '15px', borderRadius: '50%', cursor: 'pointer', zIndex: 1000, boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    badge: { position: 'absolute', top: '-5px', right: '-5px', background: 'red', color: 'white', borderRadius: '50%', padding: '2px 7px', fontSize: '12px', border: '2px solid white', fontWeight: 'bold' },
+    overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', justifyContent: 'flex-end' },
+    sidebar: { width: '380px', background: '#f8f9fa', height: '100%', display: 'flex', flexDirection: 'column', padding: '20px', boxShadow: '-5px 0 15px rgba(0,0,0,0.1)' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #ddd', paddingBottom: '10px' },
+    itemsContainer: { flex: 1, overflowY: 'auto' },
+    empresaCard: { background: 'white', borderRadius: '12px', marginBottom: '15px', border: '1px solid #eee', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+    empresaHeader: { padding: '12px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' },
+    empresaInfo: { display: 'flex', alignItems: 'center', gap: '10px' },
+    logoMini: { width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #eee' },
+    logoPlaceholder: { width: '32px', height: '32px', borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6f4e37' },
+    nombreEmpresa: { fontWeight: 'bold', fontSize: '15px', color: '#333' },
+    productosDetalle: { padding: '15px', background: '#fcfcfc', borderTop: '1px solid #f0f0f0' },
+    productoFila: { display: 'flex', gap: '12px', marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid #eee' },
+    prodImg: { width: '50px', height: '50px', borderRadius: '6px', objectFit: 'cover' },
+    prodHeader: { display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' },
+    prodNombre: { fontWeight: '500', color: '#333', maxWidth: '120px' },
+    btnEliminar: { color: '#ff4d4d', cursor: 'pointer', fontSize: '13px' },
+    controles: { display: 'flex', alignItems: 'center', gap: '10px' },
+    qtyBtn: { width: '24px', height: '24px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    stockWarning: { fontSize: '10px', color: '#e67e22', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '2px' },
+    empresaFooter: { marginTop: '10px', paddingTop: '10px', borderTop: '2px dashed #eee' },
+    horaCaja: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' },
+    inputHora: { padding: '5px', borderRadius: '5px', border: '1px solid #ccc', outline: 'none', fontSize: '13px' },
+    totalCaja: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px' },
+    btnConfirmar: { width: '100%', padding: '12px', background: '#6f4e37', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', transition: '0.3s' }
 };
 
 export default CarritoFlotante;

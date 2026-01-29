@@ -269,6 +269,7 @@ const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, act
                         {/* RUTAS EMPRESA */}
                         <Route path="/empresa/panel" element={<DashboardEmpresa />} />
                         <Route path="/empresa/productos/nuevo" element={<AgregarProducto />} />
+                        <Route path="/empresa/productos/editar/:id" element={<AgregarProducto />} />
                         <Route path="/empresa/productos" element={<MisProductos />} />
                         <Route path="/empresa/pedidos" element={<GestionPedidosEmpresa />} />
 
