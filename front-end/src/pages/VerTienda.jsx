@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { FaStar, FaStarHalfAlt, FaRegStar } from 'react-icons/fa';
 
+// Agregamos = [] para que si no llega el carrito, el código no rompa
 const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
     const { id } = useParams();
     const [empresa, setEmpresa] = useState(null);
@@ -10,17 +11,17 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
     const [categorias, setCategorias] = useState([]);
     const [filtroNombre, setFiltroNombre] = useState('');
     const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('todas');
-    
-    // Estado para evitar múltiples clics rápidos
-    const [procesando, setProcesando] = useState({});
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 const response = await axios.get(`http://127.0.0.1:8000/api/cliente/empresa/${id}/productos`);
-                setEmpresa(response.data.empresa);
-                setProductos(response.data.productos);
-                setCategorias(response.data.categorias);
+                // Validamos que la respuesta tenga los datos esperados
+                if (response.data) {
+                    setEmpresa(response.data.empresa);
+                    setProductos(response.data.productos || []);
+                    setCategorias(response.data.categorias || []);
+                }
             } catch (error) {
                 console.error("Error cargando la tienda", error);
             }
@@ -28,30 +29,13 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
         fetchData();
     }, [id]);
 
-    const handleAgregar = async (prod) => {
-        if (procesando[prod.id]) return;
-
-        setProcesando(prev => ({ ...prev, [prod.id]: true }));
-        try {
-            await agregarAlCarrito(prod);
-        } catch (error) {
-            console.error("Error al agregar", error);
-        } finally {
-            setProcesando(prev => ({ ...prev, [prod.id]: false }));
-        }
-    };
-
     const renderEstrellas = (promedio) => {
         const valor = parseFloat(promedio) || 0;
         const estrellas = [];
         for (let i = 1; i <= 5; i++) {
-            if (i <= valor) {
-                estrellas.push(<FaStar key={i} color="#f1c40f" />);
-            } else if (i - 0.5 <= valor) {
-                estrellas.push(<FaStarHalfAlt key={i} color="#f1c40f" />);
-            } else {
-                estrellas.push(<FaRegStar key={i} color="#ccc" />);
-            }
+            if (i <= valor) estrellas.push(<FaStar key={i} color="#f1c40f" />);
+            else if (i - 0.5 <= valor) estrellas.push(<FaStarHalfAlt key={i} color="#f1c40f" />);
+            else estrellas.push(<FaRegStar key={i} color="#ccc" />);
         }
         return (
             <div style={styles.starsContainer}>
@@ -62,7 +46,8 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
     };
 
     const productosFiltrados = productos.filter(prod => {
-        const coincideNombre = prod.nombre.toLowerCase().includes(filtroNombre.toLowerCase());
+        const nombre = prod.nombre ? prod.nombre.toLowerCase() : '';
+        const coincideNombre = nombre.includes(filtroNombre.toLowerCase());
         const coincideCat = categoriaSeleccionada === 'todas' || prod.categoria_id == categoriaSeleccionada;
         return coincideNombre && coincideCat;
     });
@@ -75,11 +60,7 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
                     backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(http://127.0.0.1:8000/storage/${empresa.foto_local})`
                 }}>
                     <div style={styles.headerContent}>
-                        <img
-                            src={`http://127.0.0.1:8000/storage/${empresa.logo}`}
-                            style={styles.shopLogo}
-                            alt={empresa.nombre}
-                        />
+                        <img src={`http://127.0.0.1:8000/storage/${empresa.logo}`} style={styles.shopLogo} alt={empresa.nombre} />
                         <div style={styles.headerTexts}>
                             <h1 style={styles.empresaNombre}>{empresa.nombre}</h1>
                             <p style={styles.empresaSlogan}>Sede Oficial - Menú Digital</p>
@@ -90,49 +71,33 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
 
             <div style={styles.contentWrapper}>
                 <div style={styles.filterBar}>
-                    <input
-                        type="text"
-                        placeholder="🔍 Buscar producto..."
-                        style={styles.searchInput}
-                        onChange={(e) => setFiltroNombre(e.target.value)}
-                    />
-                    <select
-                        style={styles.select}
-                        onChange={(e) => setCategoriaSeleccionada(e.target.value)}
-                    >
+                    <input type="text" placeholder="🔍 Buscar producto..." style={styles.searchInput} onChange={(e) => setFiltroNombre(e.target.value)} />
+                    <select style={styles.select} onChange={(e) => setCategoriaSeleccionada(e.target.value)}>
                         <option value="todas">Todas las categorías</option>
-                        {categorias.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                        ))}
+                        {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
                     </select>
                 </div>
 
                 <div style={styles.grid}>
                     {productosFiltrados.map(prod => {
-                        // Buscamos si el producto ya está en el carrito para validar stock disponible
+                        // Buscamos si el producto ya está en el carrito para calcular stock real
                         const itemEnCarrito = carrito.find(item => item.id === prod.id);
-                        const cantidadEnCarrito = itemEnCarrito ? (itemEnCarrito.pivot?.cantidad || itemEnCarrito.cantidad || 0) : 0;
+                        const cantEnCarrito = itemEnCarrito ? (itemEnCarrito.pivot?.cantidad || itemEnCarrito.cantidad || 0) : 0;
                         
-                        const isProcesando = procesando[prod.id];
-                        const agotadoEnBaseDeDatos = prod.stock <= 0;
-                        const alcanzoLimiteCarrito = cantidadEnCarrito >= prod.stock;
+                        const stockRestante = prod.stock - cantEnCarrito;
+                        const tieneStock = prod.stock > 0;
+                        const puedeSumarMas = stockRestante > 0;
 
                         return (
-                            <div key={prod.id} style={{
-                                ...styles.card,
-                                opacity: (agotadoEnBaseDeDatos || alcanzoLimiteCarrito) ? 0.7 : 1
-                            }}>
+                            <div key={prod.id} style={{ ...styles.card, opacity: tieneStock ? 1 : 0.9 }}>
                                 <div style={{ position: 'relative' }}>
-                                    <img
-                                        src={prod.imagen ? `http://127.0.0.1:8000/storage/${prod.imagen}` : 'https://via.placeholder.com/150'}
-                                        alt={prod.nombre}
-                                        style={styles.img}
+                                    <img 
+                                        src={prod.imagen ? `http://127.0.0.1:8000/storage/${prod.imagen}` : 'https://via.placeholder.com/150'} 
+                                        alt={prod.nombre} 
+                                        style={styles.img} 
                                     />
-                                    {(agotadoEnBaseDeDatos || alcanzoLimiteCarrito) && (
-                                        <div style={styles.badgeAgotado}>
-                                            {agotadoEnBaseDeDatos ? 'AGOTADO' : 'LIMITE ALCANZADO'}
-                                        </div>
-                                    )}
+                                    {!tieneStock && <div style={styles.badgeAgotado}>AGOTADO</div>}
+                                    {tieneStock && !puedeSumarMas && <div style={styles.badgeLimite}>LÍMITE EN CARRITO</div>}
                                 </div>
 
                                 <div style={styles.info}>
@@ -141,41 +106,30 @@ const VistaTienda = ({ agregarAlCarrito, carrito = [] }) => {
                                     <p style={styles.desc}>{prod.descripcion}</p>
                                     
                                     <div style={styles.footerCard}>
-                                        <span style={{
-                                            ...styles.price,
-                                            color: (agotadoEnBaseDeDatos || alcanzoLimiteCarrito) ? '#888' : '#2ecc71'
-                                        }}>
-                                            ${Number(prod.precio).toLocaleString()}
-                                        </span>
-
-                                        {!agotadoEnBaseDeDatos && !alcanzoLimiteCarrito ? (
-                                            <button 
-                                                style={isProcesando ? styles.disabledBtn : styles.addBtn} 
-                                                onClick={() => handleAgregar(prod)}
-                                                disabled={isProcesando}
-                                            >
-                                                {isProcesando ? '...' : 'Agregar'}
-                                            </button>
-                                        ) : (
-                                            <button style={styles.disabledBtn} disabled>
-                                                {agotadoEnBaseDeDatos ? 'No disponible' : 'En el carrito'}
-                                            </button>
-                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={styles.price}>${Number(prod.precio).toLocaleString()}</span>
+                                            <small style={{ color: puedeSumarMas ? '#888' : '#e67e22', fontSize: '11px' }}>
+                                                {puedeSumarMas ? `Disp: ${stockRestante}` : 'Sin más stock'}
+                                            </small>
+                                        </div>
+                                        
+                                        <button 
+                                            style={{
+                                                ...styles.addBtn,
+                                                backgroundColor: !tieneStock ? '#dc2626' : (!puedeSumarMas ? '#ccc' : '#1a1a1a'),
+                                                cursor: (tieneStock && puedeSumarMas) ? 'pointer' : 'not-allowed'
+                                            }} 
+                                            onClick={() => tieneStock && puedeSumarMas && agregarAlCarrito(prod)}
+                                            disabled={!tieneStock || !puedeSumarMas}
+                                        >
+                                            {!tieneStock ? 'Agotado' : (!puedeSumarMas ? 'En Carrito' : 'Agregar')}
+                                        </button>
                                     </div>
-                                    {alcanzoLimiteCarrito && !agotadoEnBaseDeDatos && (
-                                        <p style={{ color: '#e74c3c', fontSize: '11px', marginTop: '5px', fontWeight: 'bold' }}>
-                                            Máximo disponible en carrito
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-
-                {productosFiltrados.length === 0 && (
-                    <p style={{ textAlign: 'center', marginTop: '50px' }}>No se encontraron productos.</p>
-                )}
             </div>
         </div>
     );
@@ -194,7 +148,7 @@ const styles = {
     searchInput: { flex: 2, padding: '12px 20px', borderRadius: '25px', border: '1px solid #eee', outline: 'none', fontSize: '16px' },
     select: { flex: 1, padding: '12px', borderRadius: '25px', border: '1px solid #eee', cursor: 'pointer' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '25px' },
-    card: { background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', transition: '0.3s' },
+    card: { background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', position: 'relative' },
     img: { width: '100%', height: '200px', objectFit: 'cover' },
     info: { padding: '15px' },
     prodName: { margin: '0 0 5px 0', fontSize: '18px', fontWeight: 'bold' },
@@ -203,15 +157,9 @@ const styles = {
     desc: { color: '#777', fontSize: '14px', marginBottom: '15px', height: '40px', overflow: 'hidden' },
     footerCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     price: { fontWeight: 'bold', fontSize: '18px', color: '#2ecc71' },
-    addBtn: { background: '#1a1a1a', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' },
-    badgeAgotado: {
-        position: 'absolute', top: '10px', right: '10px', background: 'rgba(231, 76, 60, 0.9)', 
-        color: 'white', padding: '5px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold'
-    },
-    disabledBtn: {
-        background: '#bdc3c7', color: 'white', border: 'none', padding: '10px 20px', 
-        borderRadius: '8px', cursor: 'not-allowed', fontWeight: 'bold'
-    }
+    addBtn: { color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', transition: '0.3s' },
+    badgeAgotado: { position: 'absolute', top: '10px', right: '10px', backgroundColor: '#dc2626', color: 'white', padding: '4px 10px', borderRadius: '5px', fontWeight: '900', fontSize: '12px' },
+    badgeLimite: { position: 'absolute', top: '10px', right: '10px', backgroundColor: '#f39c12', color: 'white', padding: '4px 10px', borderRadius: '5px', fontWeight: '900', fontSize: '12px' }
 };
 
 export default VistaTienda;

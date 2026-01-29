@@ -1,26 +1,56 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { FaClock, FaCheck, FaArrowLeft, FaBox, FaUser, FaChevronDown, FaChevronUp, FaImage } from 'react-icons/fa';
+import { FaClock, FaCheck, FaBox, FaUser, FaChevronDown, FaChevronUp, FaImage, FaTimesCircle } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+
+// IMPORTAMOS TU LAYOUT PROFESIONAL
+import LayoutEmpresa from '../components/LayoutEmpresa'; 
 
 const GestionPedidosEmpresa = () => {
     const [pedidos, setPedidos] = useState([]);
-    // CAMBIO: Estado inicial con Mayúscula para coincidir con el ENUM
+    const [empresa, setEmpresa] = useState(null); 
     const [filtro, setFiltro] = useState('Pendiente'); 
     const [loading, setLoading] = useState(true);
     const [expandido, setExpandido] = useState({}); 
     const navigate = useNavigate();
 
-    // CAMBIO: Lista de estados con Mayúscula inicial
-    const estados = ['Pendiente', 'Preparando', 'Listo', 'Entregado'];
+    const estados = ['Pendiente', 'Preparando', 'Listo', 'Entregado', 'Cancelado'];
 
     useEffect(() => {
-        fetchPedidos();
-        const intervalo = setInterval(fetchPedidos, 30000);
-        return () => clearInterval(intervalo);
-    }, []);
+        const cargarDatosIniciales = async () => {
+            setLoading(true);
+            const token = localStorage.getItem('AUTH_TOKEN');
+            if (!token) { navigate('/login'); return; }
 
-    const fetchPedidos = async () => {
+            try {
+                // Ejecutamos ambas peticiones en paralelo
+                const [resEmpresa, resPedidos] = await Promise.all([
+                    axios.get('http://127.0.0.1:8000/api/empresa/dashboard', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }),
+                    axios.get('http://127.0.0.1:8000/api/empresa/pedidos', {
+                        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }
+                    })
+                ]);
+
+                setEmpresa(resEmpresa.data.empresa);
+                setPedidos(resPedidos.data);
+            } catch (error) {
+                console.error("Error al cargar datos:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        cargarDatosIniciales();
+
+        // Intervalo para actualizar solo los pedidos cada 30 segundos
+        const intervalo = setInterval(fetchPedidosSolo, 30000);
+        return () => clearInterval(intervalo);
+    }, [navigate]);
+
+    // Función secundaria para el refresco automático sin recargar la empresa
+    const fetchPedidosSolo = async () => {
         const token = localStorage.getItem('AUTH_TOKEN');
         try {
             const res = await axios.get('http://127.0.0.1:8000/api/empresa/pedidos', {
@@ -28,33 +58,24 @@ const GestionPedidosEmpresa = () => {
             });
             setPedidos(res.data);
         } catch (error) {
-            console.error("Error al cargar pedidos", error);
-        } finally {
-            setLoading(false);
+            console.error("Error en refresco automático:", error);
         }
     };
 
     const cambiarEstado = async (id, nuevoEstado) => {
-        const token = localStorage.getItem('AUTH_TOKEN');
-        if (!token) {
-            alert("Sesión expirada. Por favor inicia sesión nuevamente.");
+        if (nuevoEstado === 'Cancelado' && !window.confirm("¿Estás seguro de que deseas cancelar este pedido?")) {
             return;
         }
 
+        const token = localStorage.getItem('AUTH_TOKEN');
         try {
-            const res = await axios.patch(`http://127.0.0.1:8000/api/empresa/pedidos/${id}/estado`, 
-                { estado: nuevoEstado }, // Enviará 'Preparando', 'Listo', etc.
-                { 
-                    headers: { 
-                        Authorization: `Bearer ${token}`,
-                        Accept: 'application/json'
-                    } 
-                }
+            await axios.patch(`http://127.0.0.1:8000/api/empresa/pedidos/${id}/estado`, 
+                { estado: nuevoEstado },
+                { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
             );
-            console.log(res)
+            // Actualización optimista de la UI
             setPedidos(prev => prev.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p));
         } catch (error) {
-            console.error("Error detallado:", error.response?.data || error.message);
             alert(`No se pudo actualizar: ${error.response?.data?.message || "Error de servidor"}`);
         }
     };
@@ -63,34 +84,37 @@ const GestionPedidosEmpresa = () => {
         setExpandido(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    // Filtrado exacto (sensible a mayúsculas)
     const pedidosFiltrados = pedidos.filter(p => p.estado === filtro);
 
-    if (loading) return <div style={styles.center}>Cargando pedidos...</div>;
+    if (loading) return <div style={{ padding: '50px', textAlign: 'center' }}>Cargando gestión de pedidos...</div>;
 
     return (
-        <div style={styles.container}>
-            <header style={styles.header}>
-                <button onClick={() => navigate(-1)} style={styles.backBtn}>
-                    <FaArrowLeft /> Volver
-                </button>
-                <h2 style={styles.title}>Panel de Gestión (Cola de pedidos)</h2>
-            </header>
+        <LayoutEmpresa empresa={empresa}>
+            {/* CABECERA DE LA SECCIÓN */}
+            <div style={styles.contentHeader}>
+                <h2 style={styles.title}>Gestión de Pedidos</h2>
+                <p style={styles.subtitle}>Administra tus pedidos activos y finalizados en tiempo real.</p>
+            </div>
 
+            {/* BARRA DE FILTROS (TABS) */}
             <div style={styles.filterBar}>
                 {estados.map(e => (
-                    <button key={e} onClick={() => setFiltro(e)}
-                        style={{...styles.filterTab, ...(filtro === e ? styles.activeTab : {})}}>
+                    <button 
+                        key={e} 
+                        onClick={() => setFiltro(e)}
+                        style={{...styles.filterTab, ...(filtro === e ? styles.activeTab : {})}}
+                    >
                         {e} ({pedidos.filter(p => p.estado === e).length})
                     </button>
                 ))}
             </div>
 
+            {/* LISTA DE PEDIDOS */}
             <div style={styles.listContainer}>
                 {pedidosFiltrados.length === 0 ? (
                     <div style={styles.empty}>
-                        <FaBox size={40} color="#ccc" />
-                        <p>Sin pedidos en estado {filtro}</p>
+                        <FaBox size={40} color="#cbd5e1" />
+                        <p>No hay pedidos en estado <strong>{filtro}</strong></p>
                     </div>
                 ) : (
                     pedidosFiltrados.map((pedido, index) => {
@@ -100,26 +124,41 @@ const GestionPedidosEmpresa = () => {
                                 <div style={styles.mainRow}>
                                     <div style={styles.infoCol}>
                                         <div style={styles.cardHeader}>
-                                            <span style={styles.badgeIndex}>{index + 1}º en cola</span>
-                                            <span style={styles.orderId}>Orden #{pedido.id}</span>
+                                            <span style={styles.badgeIndex}>#{index + 1}</span>
+                                            <span style={styles.orderId}>Pedido {pedido.id}</span>
                                             <span style={styles.time}><FaClock /> {pedido.hora_recogida}</span>
                                         </div>
                                         <div style={styles.clientName}><FaUser size={12}/> {pedido.cliente?.name}</div>
                                         <button onClick={() => togglePedido(pedido.id)} style={styles.toggleBtn}>
-                                            {pedido.productos?.length || 0} items {esExpandido ? <FaChevronUp /> : <FaChevronDown />}
+                                            {pedido.productos?.length || 0} productos {esExpandido ? <FaChevronUp /> : <FaChevronDown />}
                                         </button>
                                     </div>
 
                                     <div style={styles.actionCol}>
                                         <div style={styles.totalPrice}>${parseFloat(pedido.total).toLocaleString()}</div>
-                                        {/* Lógica de botones con estados en Mayúscula */}
-                                        {pedido.estado === 'Pendiente' && <button style={styles.btnPrep} onClick={() => cambiarEstado(pedido.id, 'Preparando')}>Cocinar ahora</button>}
-                                        {pedido.estado === 'Preparando' && <button style={styles.btnListo} onClick={() => cambiarEstado(pedido.id, 'Listo')}>Listo</button>}
-                                        {pedido.estado === 'Listo' && <button style={styles.btnEntregar} onClick={() => cambiarEstado(pedido.id, 'Entregado')}>Entregar</button>}
-                                        {pedido.estado === 'Entregado' && <span style={styles.completed}><FaCheck /> Entregado</span>}
+                                        <div style={styles.buttonGroup}>
+                                            {pedido.estado === 'Pendiente' && (
+                                                <button style={styles.btnPrep} onClick={() => cambiarEstado(pedido.id, 'Preparando')}>Empezar Cocina</button>
+                                            )}
+                                            {pedido.estado === 'Preparando' && (
+                                                <button style={styles.btnListo} onClick={() => cambiarEstado(pedido.id, 'Listo')}>Marcar como Listo</button>
+                                            )}
+                                            {pedido.estado === 'Listo' && (
+                                                <button style={styles.btnEntregar} onClick={() => cambiarEstado(pedido.id, 'Entregado')}>Confirmar Entrega</button>
+                                            )}
+                                            
+                                            {/* BOTÓN CANCELAR (Solo para estados no finales) */}
+                                            {['Pendiente', 'Preparando', 'Listo'].includes(pedido.estado) && (
+                                                <button style={styles.btnCancel} onClick={() => cambiarEstado(pedido.id, 'Cancelado')}>Cancelar Pedido</button>
+                                            )}
+
+                                            {pedido.estado === 'Entregado' && <span style={styles.completed}><FaCheck /> Entregado con éxito</span>}
+                                            {pedido.estado === 'Cancelado' && <span style={styles.cancelled}><FaTimesCircle /> Pedido Cancelado</span>}
+                                        </div>
                                     </div>
                                 </div>
 
+                                {/* DESPLEGABLE DE PRODUCTOS */}
                                 {esExpandido && (
                                     <div style={styles.dropdown}>
                                         {pedido.productos.map(prod => (
@@ -132,8 +171,12 @@ const GestionPedidosEmpresa = () => {
                                                     )}
                                                 </div>
                                                 <div style={styles.productDetails}>
-                                                    <span style={styles.productName}><strong>{prod.pivot.cantidad}x</strong> {prod.nombre}</span>
-                                                    <span style={styles.productPrice}>Subtotal: ${(prod.pivot.precio_unitario * prod.pivot.cantidad).toLocaleString()}</span>
+                                                    <span style={styles.productName}>
+                                                        <strong>{prod.pivot.cantidad}x</strong> {prod.nombre}
+                                                    </span>
+                                                    <span style={styles.productPrice}>
+                                                        Unitario: ${parseFloat(prod.pivot.precio_unitario).toLocaleString()}
+                                                    </span>
                                                 </div>
                                             </div>
                                         ))}
@@ -144,45 +187,53 @@ const GestionPedidosEmpresa = () => {
                     })
                 )}
             </div>
-        </div>
+        </LayoutEmpresa>
     );
 };
 
-// ... Tus estilos se mantienen iguales ...
+// ESTILOS
 const styles = {
-    container: { padding: '15px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif', backgroundColor: '#f4f4f4', minHeight: '100vh' },
-    header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' },
-    backBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#6f4e37', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold' },
-    title: { margin: 0, fontSize: '20px', color: '#333' },
-    filterBar: { display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' },
-    filterTab: { padding: '8px 16px', border: '1px solid #ddd', background: 'white', cursor: 'pointer', borderRadius: '20px', fontSize: '13px', whiteSpace: 'nowrap' },
-    activeTab: { background: '#6f4e37', color: 'white', borderColor: '#6f4e37' },
-    listContainer: { display: 'flex', flexDirection: 'column', gap: '12px' },
-    card: { background: 'white', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', overflow: 'hidden' },
-    mainRow: { display: 'flex', padding: '15px', alignItems: 'center', justifyContent: 'space-between' },
+    contentHeader: { marginBottom: '30px' },
+    title: { margin: 0, fontSize: '26px', fontWeight: '800', color: '#1e293b' },
+    subtitle: { margin: '5px 0 0 0', color: '#64748b', fontSize: '15px' },
+    filterBar: { display: 'flex', gap: '10px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px' },
+    filterTab: { 
+        padding: '10px 22px', border: 'none', background: 'white', cursor: 'pointer', 
+        borderRadius: '12px', fontSize: '14px', fontWeight: '600', color: '#64748b', 
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', transition: 'all 0.2s' 
+    },
+    activeTab: { background: '#6f4e37', color: 'white' },
+    listContainer: { display: 'flex', flexDirection: 'column', gap: '16px' },
+    card: { 
+        background: 'white', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', 
+        border: '1px solid #f1f5f9', overflow: 'hidden' 
+    },
+    mainRow: { display: 'flex', padding: '24px', alignItems: 'center', justifyContent: 'space-between' },
     infoCol: { flex: 1 },
-    cardHeader: { display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '4px' },
-    badgeIndex: { backgroundColor: '#e8f4fd', color: '#2980b9', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold' },
-    orderId: { fontWeight: 'bold', fontSize: '16px' },
-    time: { color: '#d35400', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' },
-    clientName: { fontSize: '14px', color: '#777', marginBottom: '8px' },
-    toggleBtn: { background: '#eee', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' },
-    actionCol: { textAlign: 'right', minWidth: '130px' },
-    totalPrice: { marginBottom: '8px', fontWeight: 'bold', fontSize: '16px', color: '#2c3e50' },
-    btnPrep: { background: '#3498db', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', width: '100%' },
-    btnListo: { background: '#27ae60', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', width: '100%' },
-    btnEntregar: { background: '#95a5a6', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', width: '100%' },
-    completed: { color: '#27ae60', fontWeight: 'bold', fontSize: '14px' },
-    dropdown: { backgroundColor: '#fcfcfc', borderTop: '1px solid #eee', padding: '10px' },
-    productRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid #f0f0f0' },
-    imgWrapper: { width: '50px', height: '50px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#eee' },
+    cardHeader: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '8px' },
+    badgeIndex: { backgroundColor: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' },
+    orderId: { fontWeight: 'bold', fontSize: '18px', color: '#1e293b' },
+    time: { color: '#d35400', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' },
+    clientName: { fontSize: '15px', color: '#64748b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' },
+    toggleBtn: { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '7px 14px', borderRadius: '10px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
+    actionCol: { textAlign: 'right', minWidth: '180px' },
+    totalPrice: { marginBottom: '12px', fontWeight: '900', fontSize: '22px', color: '#1e293b' },
+    buttonGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    btnPrep: { background: '#2563eb', color: 'white', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' },
+    btnListo: { background: '#10b981', color: 'white', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' },
+    btnEntregar: { background: '#64748b', color: 'white', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' },
+    btnCancel: { background: 'none', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline', marginTop: '5px' },
+    completed: { color: '#10b981', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '5px' },
+    cancelled: { color: '#ef4444', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '5px' },
+    dropdown: { backgroundColor: '#f8fafc', padding: '20px', borderTop: '1px solid #f1f5f9' },
+    productRow: { display: 'flex', alignItems: 'center', gap: '15px', padding: '8px 0', borderBottom: '1px solid #f1f5f9' },
+    imgWrapper: { width: '45px', height: '45px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0' },
     productImg: { width: '100%', height: '100%', objectFit: 'cover' },
-    noImg: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc' },
-    productDetails: { display: 'flex', flexDirection: 'column', flex: 1 },
-    productName: { fontSize: '14px', color: '#333' },
-    productPrice: { fontSize: '12px', color: '#999' },
-    center: { textAlign: 'center', marginTop: '50px' },
-    empty: { textAlign: 'center', padding: '40px', color: '#aaa' }
+    noImg: { width: '100%', height: '100%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' },
+    productDetails: { display: 'flex', flexDirection: 'column' },
+    productName: { fontSize: '14px', color: '#1e293b' },
+    productPrice: { fontSize: '12px', color: '#94a3b8' },
+    empty: { textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }
 };
 
 export default GestionPedidosEmpresa;

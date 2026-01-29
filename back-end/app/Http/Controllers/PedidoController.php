@@ -31,80 +31,87 @@ class PedidoController extends Controller
             'productos' => $carrito->productos,
         ]);
     }
-
-    /**
-     * Crear un pedido específico para una tienda.
-     * Filtra los productos del carrito por empresa y genera el registro del pedido.
-     */public function store(Request $request): JsonResponse
-{
-    $user = Auth::user();
-    
-    $request->validate([
-        'empresa_id'    => 'required|exists:empresas,id',
-        'hora_recogida' => 'required|date_format:H:i'
-    ]);
-
-    $carrito = Carrito::where('user_id', $user->id)->with('productos')->first();
-
-    if (!$carrito || $carrito->productos->isEmpty()) {
-        return response()->json(['message' => 'Tu carrito está vacío.'], 400);
-    }
-
-    $productosTienda = $carrito->productos->filter(function ($producto) use ($request) {
-        return (int)$producto->empresa_id === (int)$request->empresa_id;
-    });
-
-    if ($productosTienda->isEmpty()) {
-        return response()->json(['message' => 'No hay productos de esta empresa.'], 422);
-    }
-
-    // --- VALIDACIÓN DE STOCK ANTES DE CREAR EL PEDIDO ---
-    foreach ($productosTienda as $producto) {
-        $cantidadPedida = $producto->pivot->cantidad ?? 1;
-        if ($producto->stock < $cantidadPedida) {
-            return response()->json([
-                'message' => "Lo sentimos, no hay stock suficiente de: {$producto->nombre}. Disponible: {$producto->stock}"
-            ], 422);
-        }
-    }
-
-    $total = 0;
-    foreach ($productosTienda as $producto) {
-        $cantidad = $producto->pivot->cantidad ?? 1;
-        $total += ($producto->precio ?? 0) * $cantidad;
-    }
-
-    $pedido = Pedido::create([
-        'empresa_id'    => $request->empresa_id,
-        'user_id'       => $user->id,
-        'estado'        => 'pendiente',
-        'hora_recogida' => $request->hora_recogida,
-        'total'         => $total,
-    ]);
-
-    foreach ($productosTienda as $producto) {
-        $cantidadPedida = $producto->pivot->cantidad ?? 1;
-
-        // 1. Registrar en la tabla intermedia
-        PedidoProducto::create([
-            'pedido_id'       => $pedido->id,
-            'producto_id'     => $producto->id,
-            'cantidad'        => $cantidadPedida,
-            'precio_unitario' => $producto->precio ?? 0,
+public function store(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        
+        $request->validate([
+            'empresa_id'    => 'required|exists:empresas,id',
+            'hora_recogida' => 'required|date_format:H:i'
         ]);
 
-        // 2. RESTAR STOCK DEL PRODUCTO (Crítico)
-        $producto->decrement('stock', $cantidadPedida);
+        // Iniciamos una transacción para asegurar la integridad de los datos
+        return \DB::transaction(function () use ($user, $request) {
+            
+            $carrito = Carrito::where('user_id', $user->id)->with('productos')->first();
 
-        // 3. Limpiar carrito selectivamente
-        $carrito->productos()->detach($producto->id);
+            if (!$carrito || $carrito->productos->isEmpty()) {
+                return response()->json(['message' => 'Tu carrito está vacío.'], 400);
+            }
+
+            // Filtramos productos de la empresa actual
+            $productosTienda = $carrito->productos->filter(function ($producto) use ($request) {
+                return (int)$producto->empresa_id === (int)$request->empresa_id;
+            });
+
+            if ($productosTienda->isEmpty()) {
+                return response()->json(['message' => 'No hay productos de esta empresa en tu carrito.'], 422);
+            }
+
+            // --- VALIDACIÓN PREVIA DE STOCK PARA TODOS LOS PRODUCTOS ---
+            foreach ($productosTienda as $producto) {
+                $cantidadPedida = $producto->pivot->cantidad ?? 1;
+                if ($producto->stock < $cantidadPedida) {
+                    return response()->json([
+                        'message' => "Stock insuficiente para: {$producto->nombre}. Disponible: {$producto->stock}"
+                    ], 422);
+                }
+            }
+
+            // Calcular total
+            $total = 0;
+            foreach ($productosTienda as $producto) {
+                $cantidad = $producto->pivot->cantidad ?? 1;
+                $precio = $producto->precio ?? 0;
+                $total += $precio * $cantidad;
+            }
+
+            // 1. Crear el Pedido
+            $pedido = Pedido::create([
+                'empresa_id'    => $request->empresa_id,
+                'user_id'       => $user->id,
+                'estado'        => 'Pendiente',
+                'hora_recogida' => $request->hora_recogida,
+                'total'         => $total,
+            ]);
+
+            // 2. Registrar productos y DESCONTAR STOCK
+            foreach ($productosTienda as $producto) {
+                $cantidadPedida = $producto->pivot->cantidad ?? 1;
+
+                // Registrar en la tabla intermedia de pedidos
+                PedidoProducto::create([
+                    'pedido_id'       => $pedido->id,
+                    'producto_id'     => $producto->id,
+                    'cantidad'        => $cantidadPedida,
+                    'precio_unitario' => $producto->precio ?? 0,
+                ]);
+
+                // --- AQUÍ SE DESCUENTA EL STOCK DE LA BASE DE DATOS ---
+                // Usamos decrement para evitar problemas de concurrencia
+                $producto->decrement('stock', $cantidadPedida);
+
+                // Limpiar del carrito
+                $carrito->productos()->detach($producto->id);
+            }
+
+            return response()->json([
+                'message' => 'Pedido generado correctamente y stock actualizado.',
+                'pedido'  => $pedido->load('productos')
+            ], 201);
+        });
     }
 
-    return response()->json([
-        'message' => 'Pedido generado correctamente y stock actualizado.',
-        'pedido'  => $pedido->load('productos')
-    ], 201);
-}
     /**
      * Listar los pedidos del cliente logueado.
      */
@@ -144,54 +151,37 @@ class PedidoController extends Controller
 
     /**
      * Cancelar un pedido (Flujo de Cliente).
-     */
-    public function cancelar($id): JsonResponse
-{
-    try {
-        $user = Auth::user();
+     */public function cancelar($id): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            // Cargamos los productos del pedido para devolver el stock
+            $pedido = Pedido::where('id', $id)
+                ->where('user_id', $user->id)
+                ->with('productos')
+                ->first();
 
-        // Cargamos el pedido con sus productos para poder acceder al pivot (cantidad)
-        $pedido = Pedido::with('productos')
-            ->where('id', $id)
-            ->where('user_id', $user->id)
-            ->first();
+            if (!$pedido) return response()->json(['message' => 'Pedido no encontrado'], 404);
 
-        if (!$pedido) {
-            return response()->json(['message' => 'Pedido no encontrado'], 404);
+            if (strtolower($pedido->estado) !== 'pendiente') {
+                return response()->json(['message' => 'No puedes cancelar un pedido ' . $pedido->estado], 400);
+            }
+
+            \DB::transaction(function () use ($pedido) {
+                // DEVOLVER EL STOCK A CADA PRODUCTO
+                foreach ($pedido->productos as $producto) {
+                    $producto->increment('stock', $producto->pivot->cantidad);
+                }
+
+                $pedido->update(['estado' => 'Cancelado']);
+            });
+
+            return response()->json(['message' => 'Pedido cancelado y stock devuelto']);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error', 'error' => $e->getMessage()], 500);
         }
-
-        if (strtolower($pedido->estado) !== 'pendiente') {
-            return response()->json([
-                'message' => 'No puedes cancelar un pedido que ya está: ' . $pedido->estado
-            ], 400);
-        }
-
-        // --- LÓGICA DE RESTAURACIÓN DE STOCK ---
-        foreach ($pedido->productos as $producto) {
-            // Accedemos a la cantidad guardada en la tabla pivote
-            $cantidadPedida = $producto->pivot->cantidad;
-            
-            // Incrementamos el stock del producto
-            $producto->increment('stock', $cantidadPedida);
-        }
-
-        $pedido->update([
-            'estado' => 'Cancelado'
-        ]);
-
-        return response()->json([
-            'message' => 'Pedido cancelado con éxito y stock restaurado',
-            'pedido' => $pedido
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'message' => 'Error en el servidor',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
-
     /**
      * Actualizar el estado del pedido (Flujo de Empresa).
      */

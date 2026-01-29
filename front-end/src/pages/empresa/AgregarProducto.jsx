@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FaArrowLeft, FaSave, FaImage } from 'react-icons/fa';
+
+// IMPORTAMOS EL LAYOUT
+import LayoutEmpresa from '../components/LayoutEmpresa';
 
 const AgregarProducto = () => {
     const navigate = useNavigate();
     const { id } = useParams();
     const isEdit = !!id;
     
+    const [empresa, setEmpresa] = useState(null);
     const [categorias, setCategorias] = useState([]);
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState(null);
@@ -15,7 +20,7 @@ const AgregarProducto = () => {
         nombre: '',
         descripcion: '',
         precio: '',
-        stock: '', // <--- NUEVO: Estado para el stock
+        stock: '', 
         categoria_id: '',
         imagen: null
     });
@@ -23,42 +28,50 @@ const AgregarProducto = () => {
     const token = localStorage.getItem('AUTH_TOKEN');
 
     useEffect(() => {
-        const fetchCategorias = async () => {
+        const cargarDatosIniciales = async () => {
+            if (!token) return;
+            setLoading(true);
             try {
-                const response = await axios.get('http://127.0.0.1:8000/api/categorias');
-                setCategorias(response.data);
-            } catch (error) {
-                console.error("Error al cargar categorías", error);
-            }
-        };
+                // 1. Cargamos Info Empresa y Categorías siempre
+                const [resEmpresa, resCats] = await Promise.all([
+                    axios.get('http://127.0.0.1:8000/api/empresa/dashboard', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }),
+                    axios.get('http://127.0.0.1:8000/api/categorias')
+                ]);
+                
+                setEmpresa(resEmpresa.data.empresa);
+                setCategorias(resCats.data);
 
-        const fetchProductoInfo = async () => {
-            if (isEdit) {
-                try {
-                    const response = await axios.get(`http://127.0.0.1:8000/api/empresa/productos/${id}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
+                // 2. Si hay ID, es EDICIÓN: Traemos los datos del producto
+                if (isEdit) {
+                    const resProd = await axios.get(`http://127.0.0.1:8000/api/empresa/productos/${id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
                     });
                     
+                    const p = resProd.data;
                     setFormData({
-                        nombre: response.data.nombre || '',
-                        descripcion: response.data.descripcion || '',
-                        precio: response.data.precio || '',
-                        stock: response.data.stock !== null ? response.data.stock : 0, // <--- NUEVO: Cargar stock existente
-                        categoria_id: response.data.categoria_id || '',
+                        nombre: p.nombre || '',
+                        descripcion: p.descripcion || '',
+                        precio: p.precio || '',
+                        stock: p.stock || '',
+                        categoria_id: p.categoria_id || '',
                         imagen: null 
                     });
 
-                    if (response.data.imagen_url) {
-                        setPreview(response.data.imagen_url);
+                    // Mostramos la imagen actual si existe
+                    if (p.imagen) {
+                        setPreview(`http://127.0.0.1:8000/storage/${p.imagen}`);
                     }
-                } catch (error) {
-                    console.error("Error al cargar producto:", error.response);
                 }
+            } catch (error) {
+                console.error("Error al cargar datos:", error);
+            } finally {
+                setLoading(false);
             }
         };
 
-        fetchCategorias();
-        fetchProductoInfo();
+        cargarDatosIniciales();
     }, [id, isEdit, token]);
 
     const handleChange = (e) => {
@@ -78,11 +91,12 @@ const AgregarProducto = () => {
         e.preventDefault();
         setLoading(true);
 
+        // Usamos FormData para el envío de archivos
         const data = new FormData();
         data.append('nombre', formData.nombre);
         data.append('descripcion', formData.descripcion);
         data.append('precio', formData.precio);
-        data.append('stock', formData.stock); // <--- NUEVO: Enviar stock al Backend
+        data.append('stock', formData.stock);
         data.append('categoria_id', formData.categoria_id);
         
         if (formData.imagen) {
@@ -91,6 +105,7 @@ const AgregarProducto = () => {
 
         try {
             if (isEdit) {
+                // TRUCO LARAVEL: Para editar con archivos usamos POST y simulamos PUT
                 data.append('_method', 'PUT'); 
                 await axios.post(`http://127.0.0.1:8000/api/empresa/productos/${id}`, data, {
                     headers: {
@@ -106,116 +121,106 @@ const AgregarProducto = () => {
                         'Content-Type': 'multipart/form-data'
                     }
                 });
-                alert('¡Producto publicado con éxito! ☕');
+                alert('¡Producto creado con éxito! ☕');
             }
             navigate('/empresa/productos'); 
         } catch (error) {
             console.error("Error al guardar:", error.response?.data);
-            alert('Hubo un error al guardar los cambios.');
+            alert('Error al guardar: ' + (error.response?.data?.message || 'Revisa los campos'));
         } finally {
             setLoading(false);
         }
     };
 
+    if (loading && !empresa) return <div style={{padding: '50px', textAlign: 'center'}}>Cargando...</div>;
+
     return (
-        <div style={styles.container}>
-            <div style={styles.card}>
-                <h2 style={styles.title}>{isEdit ? 'Editar Producto' : 'Nuevo Producto'}</h2>
-                
-                <div style={styles.previewContainer}>
-                    {preview ? (
-                        <img src={preview} alt="Preview" style={styles.previewImage} />
-                    ) : (
-                        <div style={styles.noImage}>Sin imagen seleccionada</div>
-                    )}
-                </div>
+        <LayoutEmpresa empresa={empresa}>
+            <div style={styles.header}>
+                <button onClick={() => navigate('/empresa/productos')} style={styles.backLink}>
+                    <FaArrowLeft /> Volver a mis productos
+                </button>
+                <h2 style={styles.title}>{isEdit ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
+            </div>
 
-                <form onSubmit={handleSubmit} style={styles.form}>
-                    <input 
-                        type="text" 
-                        name="nombre" 
-                        value={formData.nombre}
-                        placeholder="Nombre del producto" 
-                        onChange={handleChange} 
-                        required 
-                        style={styles.input} 
-                    />
-                    
-                    <textarea 
-                        name="descripcion" 
-                        value={formData.descripcion}
-                        placeholder="Descripción breve..." 
-                        onChange={handleChange} 
-                        style={styles.textarea} 
-                    />
-
-                    <div style={styles.row}>
-                        <input 
-                            type="number" 
-                            name="precio" 
-                            value={formData.precio}
-                            placeholder="Precio ($)" 
-                            onChange={handleChange} 
-                            required 
-                            style={{...styles.input, flex: 1}} 
-                        />
-                        
-                        {/* NUEVO: Input de Stock al lado del precio */}
-                        <input 
-                            type="number" 
-                            name="stock" 
-                            value={formData.stock}
-                            placeholder="Stock (Cant.)" 
-                            onChange={handleChange} 
-                            required 
-                            min="0"
-                            style={{...styles.input, flex: 1}} 
-                        />
+            <div style={styles.formContainer}>
+                <form onSubmit={handleSubmit} style={styles.gridForm}>
+                    {/* COLUMNA IZQUIERDA: IMAGEN */}
+                    <div style={styles.imageCol}>
+                        <div style={styles.previewBox}>
+                            {preview ? (
+                                <img src={preview} alt="Preview" style={styles.previewImage} />
+                            ) : (
+                                <div style={styles.noImage}><FaImage size={40} /><br/>Sin imagen</div>
+                            )}
+                        </div>
+                        <label style={styles.fileLabel}>
+                            {isEdit ? 'Cambiar Imagen' : 'Subir Imagen'}
+                            <input type="file" onChange={handleFileChange} accept="image/*" style={{display: 'none'}} />
+                        </label>
                     </div>
 
-                    <select 
-                        name="categoria_id" 
-                        value={formData.categoria_id}
-                        onChange={handleChange} 
-                        required 
-                        style={styles.input}
-                    >
-                        <option value="">Categoría...</option>
-                        {categorias.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                        ))}
-                    </select>
+                    {/* COLUMNA DERECHA: DATOS */}
+                    <div style={styles.dataCol}>
+                        <div style={styles.inputGroup}>
+                            <label style={styles.label}>Nombre del Producto</label>
+                            <input type="text" name="nombre" value={formData.nombre} onChange={handleChange} required style={styles.input} placeholder="Ej: Capuchino Vainilla" />
+                        </div>
 
-                    <label style={styles.fileLabel}>
-                        📷 {isEdit ? 'Cambiar foto (opcional)' : 'Subir foto del producto'}
-                        <input type="file" onChange={handleFileChange} accept="image/*" style={styles.fileInput} />
-                    </label>
+                        <div style={styles.inputGroup}>
+                            <label style={styles.label}>Descripción</label>
+                            <textarea name="descripcion" value={formData.descripcion} onChange={handleChange} style={styles.textarea} placeholder="Describe tu producto..." />
+                        </div>
 
-                    <button type="submit" disabled={loading} style={styles.button}>
-                        {loading ? 'Guardando...' : (isEdit ? 'Actualizar Producto' : 'Crear Producto')}
-                    </button>
-                    <button type="button" onClick={() => navigate(-1)} style={styles.cancelBtn}>Cancelar</button>
+                        <div style={styles.row}>
+                            <div style={{flex: 1}}>
+                                <label style={styles.label}>Precio ($)</label>
+                                <input type="number" name="precio" value={formData.precio} onChange={handleChange} required style={styles.input} />
+                            </div>
+                            <div style={{flex: 1}}>
+                                <label style={styles.label}>Stock Disponible</label>
+                                <input type="number" name="stock" value={formData.stock} onChange={handleChange} required style={styles.input} />
+                            </div>
+                        </div>
+
+                        <div style={styles.inputGroup}>
+                            <label style={styles.label}>Categoría</label>
+                            <select name="categoria_id" value={formData.categoria_id} onChange={handleChange} required style={styles.input}>
+                                <option value="">Seleccionar categoría...</option>
+                                {categorias.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <button type="submit" disabled={loading} style={styles.submitBtn}>
+                            <FaSave /> {loading ? 'Procesando...' : (isEdit ? 'Guardar Cambios' : 'Publicar Producto')}
+                        </button>
+                    </div>
                 </form>
             </div>
-        </div>
+        </LayoutEmpresa>
     );
 };
+
 const styles = {
-    container: { display: 'flex', justifyContent: 'center', padding: '40px', background: '#f8f9fa', minHeight: '100vh' },
-    card: { background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '500px' },
-    title: { textAlign: 'center', marginBottom: '20px', color: '#1a1a1a' },
-    // Estilos para la vista previa
-    previewContainer: { width: '100%', height: '200px', borderRadius: '10px', overflow: 'hidden', marginBottom: '20px', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    header: { marginBottom: '25px' },
+    backLink: { background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontWeight: '600', fontSize: '14px' },
+    title: { fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: 0 },
+    formContainer: { background: 'white', padding: '35px', borderRadius: '24px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' },
+    gridForm: { display: 'flex', gap: '40px', flexWrap: 'wrap' },
+    imageCol: { flex: '1', minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '15px' },
+    previewBox: { width: '100%', height: '280px', background: '#f8fafc', borderRadius: '20px', border: '2px dashed #e2e8f0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     previewImage: { width: '100%', height: '100%', objectFit: 'cover' },
-    noImage: { color: '#aaa', fontSize: '14px' },
-    form: { display: 'flex', flexDirection: 'column', gap: '15px' },
-    input: { padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px' },
-    textarea: { padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', minHeight: '80px', resize: 'vertical' },
-    row: { display: 'flex', gap: '10px' },
-    fileLabel: { padding: '15px', border: '2px dashed #6F4E37', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', color: '#6F4E37', fontWeight: 'bold' },
-    fileInput: { display: 'none' },
-    button: { padding: '15px', background: '#6F4E37', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' },
-    cancelBtn: { background: 'none', border: 'none', color: '#999', cursor: 'pointer', marginTop: '5px' }
+    noImage: { textAlign: 'center', color: '#94a3b8', fontSize: '14px' },
+    fileLabel: { background: '#f1f5f9', color: '#475569', padding: '14px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: '0.3s' },
+    dataCol: { flex: '2', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '20px' },
+    inputGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    label: { fontSize: '14px', fontWeight: '700', color: '#475569', marginLeft: '4px' },
+    input: { padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', outline: 'none', background: '#fcfcfc' },
+    textarea: { padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', minHeight: '120px', resize: 'none', outline: 'none', background: '#fcfcfc' },
+    row: { display: 'flex', gap: '20px' },
+    submitBtn: { background: '#6f4e37', color: 'white', border: 'none', padding: '16px', borderRadius: '14px', fontSize: '16px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px', boxShadow: '0 4px 12px rgba(111, 78, 55, 0.2)' }
 };
 
 export default AgregarProducto;
