@@ -110,4 +110,20 @@ class EmpresaController extends Controller
             'empresa' => $empresa
         ]);
     }
+
+    public function toggleEstado(): JsonResponse
+    {
+        $empresa = Empresa::where('user_id', Auth::id())->firstOrFail();
+    
+        $empresa->is_open = !$empresa->is_open;
+        $empresa->save();
+    
+        return response()->json([
+            'message' => $empresa->is_open
+                ? 'La tienda está ahora ABIERTA'
+                : 'La tienda está ahora CERRADA',
+            'is_open' => $empresa->is_open
+        ]);
+    }
+
 }
