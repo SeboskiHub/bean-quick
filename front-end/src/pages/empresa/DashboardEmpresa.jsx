@@ -93,6 +93,7 @@ const DashboardEmpresa = () => {
     const stats = data?.stats_cards || {};
     const charts = data?.charts || {};
     const topProductos = data?.top_productos || [];
+    console.log(topProductos)
     const ultimosPedidos = data?.ultimos_pedidos || [];
 
     return (
@@ -188,6 +189,11 @@ const DashboardEmpresa = () => {
                             <div key={i} style={styles.rankingItem}>
                                 <span style={styles.rankNum}>{i + 1}</span>
                                 <div style={{ flex: 1 }}>
+                                    <div><img 
+                                                src={`${prod.imagen}`} 
+                                                alt={prod.nombre} 
+                                                style={styles.img} 
+                                            /></div>
                                     <div style={{ fontWeight: 'bold' }}>{prod.nombre}</div>
                                     <div style={{ fontSize: '12px', color: '#888' }}>${prod.precio}</div>
                                 </div>
@@ -289,6 +295,14 @@ const styles = {
     btnExpand: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' },
     bottomGrid: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '25px' },
     rankingCard: { background: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+    img: {
+    width: '45px',        // Tamaño ideal para que no rompa el diseño
+    height: '45px',
+    borderRadius: '10px', // Bordes suaves para un look moderno
+    objectFit: 'cover',   // Importante: mantiene la proporción sin deformar
+    border: '1px solid #f1f5f9', // Un borde sutil para definir la imagen
+    display: 'block'      // Quita espacios en blanco residuales
+},
     rankingItem: { display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 0', borderBottom: '1px solid #f1f5f9' },
     rankNum: { width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '12px', fontWeight: 'bold' },
     rankSales: { background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' },
