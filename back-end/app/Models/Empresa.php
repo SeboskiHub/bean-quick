@@ -21,6 +21,7 @@ class Empresa extends Model
         'descripcion',
         'logo',
         'foto_local',
+        'is_open',
     ];
 
     /**
@@ -35,6 +36,11 @@ class Empresa extends Model
         'logo_url',
         'foto_local_url',
     ];
+
+    protected $casts = [
+        'is_open' => 'boolean',
+    ];
+
 
     // ───────────── Relaciones ─────────────
 

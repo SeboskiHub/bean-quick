@@ -105,6 +105,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pedidos', [PedidoController::class, 'indexEmpresa']);
         Route::patch('/pedidos/{pedido}/estado', [PedidoController::class, 'actualizarEstado']);
         Route::get('/dashboard/pdf', [EmpresaDashboardController::class, 'descargarReporte']);
+        Route::post('/toggle-estado', [EmpresaController::class, 'toggleEstado']);
 
     });
 
