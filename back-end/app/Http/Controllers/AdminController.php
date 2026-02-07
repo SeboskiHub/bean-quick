@@ -203,4 +203,56 @@ class AdminController extends Controller
             ], 500);
         }
     }
+    /**
+ * OBTENER TODAS LAS EMPRESAS
+ */
+public function listarEmpresas(): JsonResponse
+{
+    try {
+        // Al traer las empresas, Laravel automáticamente agregará logo_url y foto_local_url
+        // gracias al array $appends que tienes en tu modelo.
+        $empresas = Empresa::with('usuario')->get();
+        return response()->json($empresas);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+
+/****/public function editarEmpresa(Request $request, $id): JsonResponse
+{
+    $empresa = Empresa::findOrFail($id);
+
+    $request->validate([
+        'nombre'    => 'required|string|max:255',
+        'nit'       => 'required|string|unique:empresas,nit,' . $id,
+        'telefono'  => 'required|string',
+        'direccion' => 'required|string',
+    ]);
+
+    $empresa->update($request->all());
+
+    // Cargamos la relación de usuario para que React no pierda el email al actualizar
+    return response()->json([
+        'message' => 'Empresa actualizada con éxito',
+        'empresa' => $empresa->load('usuario') 
+    ]);
+}
+
+/**
+ * ELIMINAR EMPRESA
+ */
+public function eliminarEmpresa($id): \Illuminate\Http\JsonResponse
+{
+    try {
+        $empresa = Empresa::findOrFail($id);
+        
+        // Al eliminar la empresa, Laravel se encargará de los productos 
+        // si tienes configurado el "onDelete('cascade')" en tus migraciones.
+        $empresa->delete();
+
+        return response()->json(['message' => 'Empresa eliminada correctamente.']);
+    } catch (\Exception $e) {
+        return response()->json(['message' => 'Error al eliminar empresa.'], 500);
+    }
+}
 }

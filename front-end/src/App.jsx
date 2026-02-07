@@ -29,6 +29,7 @@ import Footer from './pages/components/common/Footer';
 // Nuevas páginas (Deberás crearlas a continuación)
 import MisCalificaciones from './pages/cliente/MisCalificaciones';
 import PerfilUsuario from './pages/cliente/PerfilUsuario';
+import GestionEmpresas from './pages/admin/GestionEmpresas';
 const Header = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -274,6 +275,7 @@ const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, act
                         <Route path="/empresa/productos" element={<MisProductos />} />
                         <Route path="/empresa/pedidos" element={<GestionPedidosEmpresa />} />
                         <Route path="/admin/usuarios" element={<GestionUsuarios />} />
+                        <Route path="/admin/empresas" element={<GestionEmpresas />} />
                         {/* RUTAS ADMIN */}
                         <Route path="/admin/dashboard" element={userRole === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
                         <Route path="/admin/solicitudes" element={userRole === 'admin' ? <AdminSolicitudes /> : <Navigate to="/login" />} />

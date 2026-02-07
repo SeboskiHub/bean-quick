@@ -92,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Eliminar usuario permanentemente
         Route::delete('/usuarios/{id}', [AdminController::class, 'eliminarUsuario']);
+        Route::get('/empresas', [AdminController::class, 'listarEmpresas']);
+        Route::delete('/empresas/{id}', [AdminController::class, 'eliminarEmpresa']);
+        Route::put('/empresas/{id}', [AdminController::class, 'editarEmpresa']);
     });
             
             /**
