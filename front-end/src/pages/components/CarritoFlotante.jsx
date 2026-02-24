@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { FaShoppingBag, FaTimes, FaMinus, FaPlus, FaClock, FaChevronDown, FaChevronUp, FaStore, FaTrash, FaExclamationTriangle, FaCheckCircle } from 'react-icons/fa';
 
-const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPedido, eliminarDelCarrito }) => {
-    const [isOpen, setIsOpen] = useState(false);
+const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPedido, eliminarDelCarrito, isOpen, setIsOpen}) => {
     console.log(setCarrito)
     const [seccionesAbiertas, setSeccionesAbiertas] = useState({});
     const [horasPorEmpresa, setHorasPorEmpresa] = useState({});

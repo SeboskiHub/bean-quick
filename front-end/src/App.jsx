@@ -138,6 +138,7 @@ const Header = () => {
 // --- COMPONENTE PRINCIPAL APP ---
 function App() {
     const [carrito, setCarrito] = useState([]);
+    const [carritoAbierto, setCarritoAbierto] = useState(false);
 
     const fetchCarrito = useCallback(async () => {
         const token = localStorage.getItem('AUTH_TOKEN');
@@ -226,12 +227,14 @@ function App() {
                 confirmarPedido={confirmarPedido}
                 actualizarCantidad={actualizarCantidad}
                 eliminarDelCarrito={eliminarDelCarrito}
+                carritoAbierto={carritoAbierto}              // ← NUEVO
+                setCarritoAbierto={setCarritoAbierto} 
             />
         </BrowserRouter>
     );
 }
 
-const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, actualizarCantidad, eliminarDelCarrito }) => {
+const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, actualizarCantidad, eliminarDelCarrito, carritoAbierto, setCarritoAbierto}) => {
     const location = useLocation();
     const userRole = localStorage.getItem('USER_ROLE');
 
@@ -251,6 +254,8 @@ const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, act
                     confirmarPedido={confirmarPedido}
                     actualizarCantidad={actualizarCantidad}
                     eliminarDelCarrito={eliminarDelCarrito}
+                    isOpen={carritoAbierto}                      // ← NUEVO
+                    setIsOpen={setCarritoAbierto}   
                 />
             )}
 
@@ -263,7 +268,7 @@ const AppLayout = ({ carrito, setCarrito, agregarAlCarrito, confirmarPedido, act
                         <Route path="/empresa/activar/:token" element={<ActivarCuenta />} />
                         <Route path="/solicitud-empresa" element={<RegistroEmpresa />} />
                         <Route path="/cliente/dashboard" element={<DashboardCliente />} />
-                        <Route path="/tienda/:id" element={<VistaTienda agregarAlCarrito={agregarAlCarrito} />} />
+                        <Route path="/tienda/:id" element={<VistaTienda agregarAlCarrito={agregarAlCarrito} abrirCarrito={() => setCarritoAbierto(true)}/>} />
                         <Route path="/cliente/mis-pedidos" element={<MisPedidos />} />
                         <Route path="/perfil" element={<PerfilUsuario />} />
                         <Route path="/cliente/mis-calificaciones" element={<MisCalificaciones/>} />
