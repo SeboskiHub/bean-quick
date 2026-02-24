@@ -44,7 +44,7 @@ class RegisteredUserController extends Controller
             'password' => [
                 'required', 
                 'confirmed', 
-                Password::min(8)->mixedCase()->numbers()->uncompromised()
+                Password::min(8)->mixedCase()->numbers()
             ],
             'rol' => ['required', 'in:empresa,cliente,admin'],
         ]);
