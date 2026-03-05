@@ -205,17 +205,43 @@ function App() {
         } catch (error) { console.error("Error al eliminar", error); }
     };
 
+    //funcion para confirmar pedido y redirigir a Mercado Pago
+
     const confirmarPedido = async (direccion, horaRecogida, empresaId, productosTienda) => {
         const token = localStorage.getItem('AUTH_TOKEN');
+    
         try {
-            await axios.post(`http://127.0.0.1:8000/api/cliente/pedidos`,
-                { direccion, hora_recogida: horaRecogida, empresa_id: empresaId, items: productosTienda },
+            // 1️⃣ Crear pedido
+            const pedidoRes = await axios.post(
+                'http://127.0.0.1:8000/api/cliente/pedidos',
+                {
+                    direccion,
+                    hora_recogida: horaRecogida,
+                    empresa_id: empresaId,
+                    items: productosTienda
+                },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            alert("¡Pedido realizado!");
-            setCarrito(prev => prev.filter(item => item.empresa_id != empresaId));
+    
+            const pedidoId = pedidoRes.data.pedido.id;
+    
+            // 2️⃣ Generar preferencia Mercado Pago
+            const pagoRes = await axios.post(
+                `http://127.0.0.1:8000/api/cliente/pedidos/${pedidoId}/pagar`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+    
+            // 3️⃣ Redirigir al checkout
+            window.location.href = pagoRes.data.init_point;
+    
             return true;
-        } catch (error) { alert("Error al procesar el pedido" + error); return false; }
+    
+        } catch (error) {
+            console.error("Error en el proceso de pago:", error);
+            alert(error.response?.data?.message || "Error al procesar el pago");
+            return false;
+        }
     };
 
     return (
