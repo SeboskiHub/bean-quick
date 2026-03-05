@@ -346,6 +346,9 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
                                 Confirmar Pedido
                             </button>
                         </div>
+                        <span style={styles.modalFooterDisclaimer}>
+                            Al confirmar, serás redirigido a Mercado Pago para completar tu compra.
+                        </span>
                     </div>
                 </div>
             )}
@@ -529,6 +532,14 @@ const styles = {
         cursor: 'pointer',
         fontSize: '14px',
         transition: 'background 0.3s'
+    },
+
+    modalFooterDisclaimer: {
+        marginTop: '5px',
+        marginBottom: '10px',
+        fontSize: '12px',
+        color: '#666',
+        textAlign: 'center'
     }
 };
 
