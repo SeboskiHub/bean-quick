@@ -100,7 +100,6 @@ const CarritoFlotante = ({ carrito, setCarrito, actualizarCantidad, confirmarPed
                     return nuevas;
                 });
                 cerrarModal();
-                // Si el carrito queda vacío tras confirmar la última tienda, cerramos el sidebar
                 if (carrito.length <= productos.length) setIsOpen(false);
             }
         } catch (error) {

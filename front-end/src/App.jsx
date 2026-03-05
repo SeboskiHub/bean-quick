@@ -160,6 +160,17 @@ function App() {
     const agregarAlCarrito = async (producto, cantidad = 1) => {
         const token = localStorage.getItem('AUTH_TOKEN');
         if (!token) { alert("Debes iniciar sesión"); return; }
+
+        // Validar empresa única en el carrito
+        if (carrito.length > 0) {
+            const empresaActual = carrito[0].empresa_id || carrito[0].empresa?.id;
+            const empresaProducto = producto.empresa_id || producto.empresa?.id;
+            if (empresaActual !== empresaProducto) {
+                alert("Solo puedes agregar productos de una sola cafetería. Vacía el carrito para cambiar de empresa.");
+                return;
+            }
+        }
+
         try {
             const res = await axios.post(`http://127.0.0.1:8000/api/cliente/carrito/agregar/${producto.id}`,
                 { cantidad }, { headers: { Authorization: `Bearer ${token}` } }
