@@ -9,6 +9,8 @@ use App\Models\PedidoProducto;
 use App\Models\Carrito;
 use App\Models\Producto;
 use App\Models\Empresa;
+use App\Mail\PedidoCreadoMail;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\JsonResponse;
 
 class PedidoController extends Controller
@@ -114,7 +116,12 @@ public function store(Request $request): JsonResponse
                 'precio_unitario' => $producto->precio ?? 0,
             ]);
         }
-
+        // Enviar correo (si falla, el pedido ya fue creado)
+        try {
+            Mail::to($user->email)->send(new PedidoCreadoMail($pedido, $user));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando correo de pedido: ' . $e->getMessage());
+        }
         return response()->json([
             'message' => 'Pedido generado pendiente de pago.',
             'pedido'  => $pedido->load('productos')
@@ -127,11 +134,25 @@ public function store(Request $request): JsonResponse
      */
     public function indexCliente(): JsonResponse
     {
+        $estadosPermitidos = ['pendiente', 'pagado', 'preparando', 'listo', 'entregado', 'cancelado'];
         $pedidos = Pedido::where('user_id', Auth::id())
             ->with(['empresa', 'productos'])
             ->orderBy('created_at', 'desc')
-            ->get();
-
+            ->get()
+            ->map(function($pedido) {
+                $estado = strtolower($pedido->estado);
+                $estado_pago = strtolower($pedido->estado_pago);
+                if ($estado === 'pendiente' && $estado_pago === 'aprobado') {
+                    $pedido->pedido_estado_final = 'pagado';
+                } else {
+                    $pedido->pedido_estado_final = $estado;
+                }
+                return $pedido;
+            })
+            ->filter(function($pedido) use ($estadosPermitidos) {
+                return in_array(strtolower($pedido->pedido_estado_final), $estadosPermitidos);
+            })
+            ->values();
         return response()->json($pedidos);
     }
 
