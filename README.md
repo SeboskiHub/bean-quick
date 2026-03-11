@@ -47,7 +47,6 @@ Las cafeterías pueden registrar sus productos y gestionar pedidos en tiempo rea
 ## Frontend
 - React
 - JavaScript
-- Bootstrap
 
 ## Otros
 - Axios
